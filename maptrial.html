@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-Time Location Tracker</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCX_qMC6hH2eN0lXnApQJcc-bZHR-Z2GOk&callback=initMap" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        #locationInfo {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        #map {
+            width: 100%;
+            height: 400px;
+        }
+
+        #destinationInput {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        body {
+    background-image: url('your-image-url.jpg'); /* Replace 'your-image-url.jpg' with your image file path */
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-position: center;
+}
+
+
+        #getDirections, #getVoiceDirections {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+           
+        }
+
+        #getDirections:hover, #getVoiceDirections:hover {
+            background-color: #0056b3;
+        }
+
+        #address, #mapLink {
+            font-style: italic;
+        }
+
+        #directionsText {
+            margin-top: 20px;
+        }
+
+        #voiceDirections {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .message-box {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        text-align: center;
+    }
+
+    .message-box p {
+        margin-bottom: 10px;
+    }
+
+    .message-box button {
+        padding: 10px 20px;
+        background-color: #007BFF;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+    }
+
+    .message-box button:hover {
+        background-color: #0056b3;
+    }
+    </style>
+</head>
+<body>
+    <p>Latitude: <span id="latitude"></span></p>
+    <p>Longitude: <span id="longitude"></span></p>
+    <p>Address: <span id="address"></span></p>
+    <p>Distance to Destination: <span id="distanceToDestination"></span> </p>
+
+    <a id="mapLink" target="_blank" href="#">View on Google Maps</a>
+    <div id="map" style="width: 100%; height: 400px;"></div>
+    <input type="text" id="destinationInput" placeholder="Enter your destination">
+    <!--<button id="getDirections">Get Directions</button>
+    <button id="getVoiceDirections">Get Voice Directions</button> -->
+    <div id="directionsText"></div>
+    <div id="voiceDirections"></div>
+    <!-- Add an element to display the spoken destination -->
+    <button id="speechRecognitionButton">Speak Destination</button>
+    <div id="messageBox" class="message-box">
+        <p id="messageText">Please allow geolocation access and set a destination for voice directions.</p>
+        <button id="closeMessageBox">OK</button>
+    </div>
+
+    <script>
+        var current_latitude, current_longitude;
+        var watchId = null; // To track the location continuously
+        var destinationLocation;
+        var synth = window.speechSynthesis;
+
+    var utterance = new SpeechSynthesisUtterance();
+    var directionsService;
+        var directionsRenderer;
+
+
+        function calculateDistanceBetweenCoordinates(lat1, lon1, lat2, lon2) {
+            const earthRadius = 6371; // Radius of the Earth in kilometers
+            const degToRad = (degrees) => degrees * (Math.PI / 180);
+
+            // Convert latitude and longitude from degrees to radians
+            lat1 = degToRad(lat1);
+            lon1 = degToRad(lon1);
+            lat2 = degToRad(lat2);
+            lon2 = degToRad(lon2);
+
+            // Haversine formula
+            const dlon = lon2 - lon1;
+            const dlat = lat2 - lat1;
+            const a = Math.sin(dlat / 2) * 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlon / 2) * 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            // Calculate the distance
+            const distance = earthRadius * c;
+            return distance;
+        }
+        function showPosition(position) {
+            current_latitude = position.coords.latitude;
+            current_longitude = position.coords.longitude;
+
+            document.getElementById("latitude").textContent = current_latitude;
+            document.getElementById("longitude").textContent = current_longitude;
+
+            var mapLink = document.getElementById("mapLink");
+            mapLink.href = `https://www.google.com/maps?q=${current_latitude},${current_longitude}`;
+            mapLink.textContent = "View on Google Maps";
+
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${current_latitude}&lon=${current_longitude}`)
+            .then(response => response.json())
+            .then(data => {
+                    if (data.address) {
+                        var address = data.display_name;
+                        document.getElementById("address").textContent = address;
+                    } else {
+                        alert("No address found for this location.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching address:", error);
+                });
+                
+    // Now, 'distance' holds the calculated distance
+   
+            // Check if we are close to the destination and provide voice directions
+            if (destinationLocation) {
+                //var distance = google.maps.geometry.spherical.computeDistanceBetween(
+                  //  new google.maps.LatLng(current_latitude, current_longitude),
+                    //destinationLocation
+                //);
+                var distance = calculateDistanceBetweenCoordinates(
+        current_latitude,
+        current_longitude,
+        destinationLocation.lat(),
+        destinationLocation.lng()
+    );
+
+    document.getElementById("distanceToDestination").textContent = distance.toFixed(2) + " km";
+                if (distance < 100) {
+                    getVoiceDirectionsToDestination();
+                }
+            }
+        }
+
+        function showError(error) {
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    alert("User denied the request for Geolocation.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    alert("Location information is unavailable.");
+                    break;
+                case error.TIMEOUT:
+                    alert("The request to get user location timed out.");
+                    break;
+                case error.UNKNOWN_ERROR:
+                    alert("An unknown error occurred.");
+                    break;
+            }
+        }
+
+        function startLocationTracking() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(showPosition, showError);
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        function stopLocationTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+        }
+
+        // Automatically start location tracking on page load
+        startLocationTracking();
+
+        // Function to get directions dynamically
+        function showDirectionsToDestination() {
+        var destination = document.getElementById("destinationInput").value;
+
+        if (destination) {
+            var geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ 'address': destination }, function (results, status) {
+                if (status === google.maps.GeocoderStatus.OK) {
+                    destinationLocation = results[0].geometry.location;
+
+                    var map = new google.maps.Map(document.getElementById("map"), {
+                        zoom: 14,
+                        center: { lat: current_latitude, lng: current_longitude }
+                    });
+
+                    var directionsService = new google.maps.DirectionsService();
+                     var directionsRenderer = new google.maps.DirectionsRenderer({ map: map, panel: document.getElementById("directionsText") });
+
+                    var request = {
+                        origin: new google.maps.LatLng(current_latitude, current_longitude),
+                        destination: destinationLocation,
+                        travelMode: google.maps.TravelMode.DRIVING
+                    };
+
+                    directionsService.route(request, function (response, status) {
+    if (status === google.maps.DirectionsStatus.OK) {
+        // Display the route on the map
+        directionsRenderer.setDirections(response);
+
+        // You can also extract and display textual directions
+        //var steps = response.routes[0].legs[0].steps;
+        //var directionsText = "";
+        //for (var i = 0; i < steps.length; i++) {
+            //var stepDirections = sanitizeDirections(steps[i].instructions);
+            //directionsText += (i + 1) + ". " + stepDirections + "<br>";
+        //}
+        //document.getElementById("directionsText").innerHTML = directionsText;
+
+        // Start voice-guided navigation
+        getVoiceDirectionsToDestination(response.routes[0].legs[0].steps);
+
+
+        // Calculate and display the distance
+        var distance = calculateDistanceBetweenCoordinates(
+            current_latitude,
+            current_longitude,
+            destinationLocation.lat(),
+            destinationLocation.lng()
+        );
+        document.getElementById("distanceToDestination").textContent = distance.toFixed(2) + " km";
+    } else if (status === google.maps.DirectionsStatus.ZERO_RESULTS) {
+        alert("No results found for the specified destination.");
+    } else {
+        alert("Error fetching directions: " + status);
+    }
+});
+
+                } else {
+                    alert("Geocode was not successful for the following reason: " + status);
+                }
+            });
+        } else {
+            alert("Please enter a destination.");
+        }
+    }
+
+
+
+// Replace your existing alert calls with showMessage
+// For example:
+// alert("Please allow geolocation access and set a destination for voice directions.");
+
+
+        // Function to get voice directions
+        function getVoiceDirectionsToDestination() {
+        if (current_latitude && current_longitude && destinationLocation) {
+            var directionsService = new google.maps.DirectionsService();
+            var request = {
+                origin: new google.maps.LatLng(current_latitude, current_longitude),
+                destination: destinationLocation,
+                travelMode: google.maps.TravelMode.DRIVING
+            };
+
+            directionsService.route(request, function (response, status) {
+                if (status === google.maps.DirectionsStatus.OK) {
+                    var steps = response.routes[0].legs[0].steps;
+                    var stepIndex = 0;
+
+                    function provideNextDirection() {
+                        if (stepIndex < steps.length) {
+                            var step = steps[stepIndex];
+                            var distanceToNextStep = step.distance.value; // in meters
+
+                            if (distanceToNextStep <= 50) {
+                                // Approaching the next maneuver, provide voice instruction
+                               // utterance.text = step.instructions;
+                               // synth.speak(utterance);
+                                var stepDirections = sanitizeDirections(step.instructions);
+            speakDirections(stepDirections);
+                                var voiceDirectionsElement = document.getElementById("voiceDirections");
+            voiceDirectionsElement.textContent = step.instructions;
+            
+                                stepIndex++;
+                            }
+
+                            // Check again after a short delay (adjust as needed)
+                            setTimeout(provideNextDirection, 1000);
+                        }
+                    }
+
+                    provideNextDirection();
+                } else if (status === google.maps.DirectionsStatus.ZERO_RESULTS) {
+                    alert("No results found for the specified destination.");
+                } else {
+                    alert("Error fetching directions: " + status);
+                }
+            });
+        } else {
+            alert("Please allow geolocation access and set a destination for voice directions.");
+        }
+    }
+
+
+        // Function to use text-to-speech for voice directions
+        function speakDirections(directions) {
+            // You would need to integrate a text-to-speech library here
+            // For example, you can use the Web Speech API or a third-party library like responsivevoice.js
+            // Here's a simplified example using the Web Speech API (Chrome-only):
+            var synth = window.speechSynthesis;
+            var utterance = new SpeechSynthesisUtterance(directions);
+            synth.speak(utterance);
+        }
+
+
+        // Function to handle speech recognition for entering the destination
+        function startSpeechRecognitionForDestination() {
+    const recognition = new webkitSpeechRecognition() || new SpeechRecognition();
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+        const spokenText = event.results[0][0].transcript;
+        document.getElementById("destinationInput").value = spokenText;
+
+        // This is where you should add the modified code
+        // Immediately get directions and voice directions
+        showDirectionsToDestination();
+        getVoiceDirectionsToDestination();
+
+        // Stop speech recognition
+        recognition.stop();
+    };
+
+    recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+    };
+
+    // Start speech recognition
+    recognition.start();
+}
+
+
+         // Function to handle speech recognition for entering the destination
+         function startSpeechRecognitionForDestination() {
+        const recognition = new webkitSpeechRecognition() || new SpeechRecognition();
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+            const spokenText = event.results[0][0].transcript;
+            document.getElementById("destinationInput").value = spokenText;
+
+            showDirectionsToDestination();
+            // Voice-guided navigation will start in showDirectionsToDestination
+
+            recognition.stop();
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+        };
+
+        recognition.start();
+    }
+
+
+        // Add an event listener to start speech recognition when the button is clicked
+        document.getElementById("speechRecognitionButton").addEventListener("click", startSpeechRecognitionForDestination);
+
+        
+       // Function to get voice directions
+       // Function to get voice directions
+function getVoiceDirectionsToDestination(steps) {
+    if (steps && steps.length > 0) {
+        var stepIndex = 0;
+
+        function provideNextDirection() {
+            if (stepIndex < steps.length) {
+                var step = steps[stepIndex];
+                var distanceToNextStep = step.distance.value; // in meters
+
+                if (distanceToNextStep <= 50) {
+                    var stepDirections = sanitizeDirections(step.instructions);
+                    speakDirections(stepDirections);
+
+                    var voiceDirectionsElement = document.getElementById("voiceDirections");
+                    voiceDirectionsElement.textContent = step.instructions;
+
+                    stepIndex++;
+                }
+
+                // Check again after a short delay (adjust as needed)
+                setTimeout(provideNextDirection, 1000);
+            }
+        }
+
+        // Start providing voice directions
+        provideNextDirection();
+    } else {
+        alert("No route steps provided for voice directions.");
+    }
+}
+
+
+function sanitizeDirections(directions) {
+    var div = document.createElement("div");
+    div.innerHTML = directions;
+    return div.textContent || div.innerText || "";
+}
+
+
+        
+
+        // Add an event listener to start speech recognition when the button is clicked
+        //document.getElementById("getDirections").addEventListener("click", showDirectionsToDestination);
+        //document.getElementById("getVoiceDirections").addEventListener("click", getVoiceDirectionsToDestination);
+
+        
+    </script>
+</body>
+</html>

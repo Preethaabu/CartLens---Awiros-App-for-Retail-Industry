@@ -1,0 +1,16 @@
+node_modules/
+final_yolo/
+first_yolo/
+images/
+img/
+output/
+predict/
+runs/
+uploads/
+yolonas/
+yolonas_predict/
+yolov8/
+*.zip
+triangle.py
+webcam.py
+webscrap.py
